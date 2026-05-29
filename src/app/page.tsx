@@ -1,15 +1,27 @@
 // src/app/page.tsx
-'use client'; //server components are the default in Next.js 13, but we need client components for interactivity (search bar, filters, etc.)/useState for search input state management
+'use client';
 
 import ExerciseCard from '@/components/exercises/ExerciseCard';
-import {exercises} from '@/data/exercises';
+//import {exercises} from '@/data/exercises';
 import Modal from '@/components/ui/Modal';
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import { createClient } from '@supabase/supabase-js';
+//import { error } from 'console';
+
+const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 export default function Home() {
 
   //ref for testimonials scroll container
   const scrollContainer = useRef<HTMLDivElement>(null);
+
+  //state to hold the list of exercises (will be loaded from supabase later)
+  const[dbExercises, setDbExercises] = useState<any[]>([]);
+  const [loading,setLoading] = useState(true);
+
 
   //search and filter states
   const [searchTerm, setSearchTerm] = useState(''); //state that holds the current value of the search input/initially empty string
@@ -33,6 +45,32 @@ export default function Home() {
     }
   };
 
+  //fetch exercises from supabase when component mounts
+  useEffect(() => {
+    async function fetchExercises() {
+      try {
+        const { data, error } = await supabase
+          .from('exercises') //name of the table in supabase
+          .select('*') //select all columns
+          .order('id', { ascending: true }); //order by id in ascending order (optional, but helps to have a consistent order)
+
+          if(error) {
+            console.error("Error fetching exercises:", error);
+          } else if (data) {
+            setDbExercises(data); //update the dbExercises state with the fetched data
+          }
+      } catch (error) {
+        console.error("Unexpected error:", error);
+      } finally {
+         setLoading(false); //set loading to false after fetch is complete (whether successful or not)
+        }
+      }
+      
+      fetchExercises(); //call the async function to fetch exercises
+    }, []);
+
+    
+
   //Modal states
   const [selectedExercise, setSelectedExercise] = useState<any>(null); //state to hold the currently selected exercise for the modal
   const [isModalOpen, setIsModalOpen] = useState(false); //state to control the visibility of the modal
@@ -48,11 +86,10 @@ export default function Home() {
     }
 
     //filter exercises based on search term and difficulty filter/filteredExercises is a new array that contains only the exercises that match the search term and the selected difficulty filter
-    const filteredExercises = exercises.filter((exercise) => {
+    const filteredExercises = dbExercises.filter((exercise) => {
       const matchesSearch = exercise.name.toLowerCase().includes(searchTerm.toLowerCase()); //check if exercise name includes the search term (case-insensitive)
       const matchesFilter = difficultyFilter === '' || exercise.difficulty === difficultyFilter; //check if exercise matches the selected difficulty filter (or if no filter is selected)
-    
-    
+      
       return matchesSearch && matchesFilter; 
     });
   
@@ -112,14 +149,19 @@ export default function Home() {
               
               
           {/* Exercise Grid */}
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6"> {/*loop that navigates through exercises from data/exercises.ts/.map()= For each exercise, render an ExerciseCard/changed from exercises to filteredExercises*/}
-            {filteredExercises.map((exercise) => (
-              <div
-                key={exercise.id}
-                onClick={() => openModal(exercise)}
-                className= "cursor-pointer"
-              >
-              <ExerciseCard 
+          {loading ? ( //conditional rendering: if loading is true, show loading message. otherwise, show the exercise grid
+            <div className='text-center text-zinc-400 py-10 text-xl'>
+              Loading exercises...
+            </div>
+          ) : (
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6"> {/*loop that navigates through exercises from data/exercises.ts/.map()= For each exercise, render an ExerciseCard/changed from exercises to filteredExercises*/}
+              {filteredExercises.map((exercise) => (
+                <div
+                  key={exercise.id}
+                  onClick={() => openModal(exercise)}
+                  className= "cursor-pointer"
+                >
+                <ExerciseCard 
                   key={exercise.id}
                   name={exercise.name} 
                   difficulty={exercise.difficulty} 
@@ -128,39 +170,40 @@ export default function Home() {
                   alt={exercise.name}
                 />
               </div>
-            ))}
-            {/*<ExerciseCard //old exercise tiles, now rendered from the data 
-              name="Push-Ups" 
-              difficulty="Beginner" 
-              description="Develop chest, shoulders and triceps. Perfect for beginners."
-              imageSrc="/exercises/pushup.jpg" 
-              alt="Push-Ups"
-            />
-            
-            <ExerciseCard 
-              name="Squats" 
-              difficulty="Beginner" 
-              description="The best lower body exercise. Builds powerful legs and core."
-              imageSrc="/exercises/squat.jpeg" 
-              alt="Squats"
-            />
-            
-            <ExerciseCard 
-              name="Dips" 
-              difficulty="Intermediate" 
-              description="Excellent for triceps and chest. Great pushing movement."
-              imageSrc="/exercises/dip.jpeg" 
-              alt="Dips"
-            />
-            
-            <ExerciseCard 
-              name="Plank" 
-              difficulty="Beginner" 
-              description="Builds insane core strength and stability."
-              imageSrc="/exercises/plank.jpg" 
-              alt="Plank"
-            />*/}
-          </div>
+              ))}
+              {/*<ExerciseCard //old exercise tiles, now rendered from the data 
+                name="Push-Ups" 
+                difficulty="Beginner" 
+                description="Develop chest, shoulders and triceps. Perfect for beginners."
+                imageSrc="/exercises/pushup.jpg" 
+                alt="Push-Ups"
+              />
+              
+              <ExerciseCard 
+                name="Squats" 
+                difficulty="Beginner" 
+                description="The best lower body exercise. Builds powerful legs and core."
+                imageSrc="/exercises/squat.jpeg" 
+                alt="Squats"
+              />
+              
+              <ExerciseCard 
+                name="Dips" 
+                difficulty="Intermediate" 
+                description="Excellent for triceps and chest. Great pushing movement."
+                imageSrc="/exercises/dip.jpeg" 
+                alt="Dips"
+              />
+              
+              <ExerciseCard 
+                name="Plank" 
+                difficulty="Beginner" 
+                description="Builds insane core strength and stability."
+                imageSrc="/exercises/plank.jpg" 
+                alt="Plank"
+              />*/}
+            </div>
+          )} 
         </div>
       </section>
       
@@ -365,11 +408,14 @@ export default function Home() {
         </div>
       </section>
       
-      <Modal 
-        exercise={selectedExercise}
-        isOpen={isModalOpen}
-        onClose={closeModal}
-      />
+      {isModalOpen && selectedExercise && (
+        <Modal 
+          exercise={selectedExercise}
+          isOpen={isModalOpen}
+          onClose={closeModal}
+        />
+      )}
+      
     </div>
   );
 }
